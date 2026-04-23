@@ -1,0 +1,36 @@
+PROMPTS = [
+    "What are 3 things you're grateful for today?",
+    "Who made a positive difference in your life today, and how?",
+    "What's something small you noticed and appreciated today?",
+    "What challenge taught you something valuable today?",
+    "What moment brought you joy or peace today?",
+    "What's something about your body or health you're thankful for?",
+    "What opportunity are you grateful to have right now?",
+    "What beauty did you notice in the world today?",
+    "What's a memory you're especially grateful for?",
+    "What's something you usually take for granted that you appreciate today?",
+    "What made you smile or laugh today?",
+    "What progress, big or small, are you proud of today?",
+    "Who in your life are you most grateful for right now, and why?",
+    "What comfort in your life do you deeply appreciate?",
+    "What new thing did you learn or discover today?",
+    "What's a simple pleasure you enjoyed today?",
+    "What's going right in your life that you might be overlooking?",
+    "What act of kindness — given or received — are you grateful for?",
+    "What about your surroundings are you thankful for today?",
+    "What's a goal or dream you're grateful to be working toward?",
+    "What's something in nature you noticed and appreciated today?",
+    "What relationship in your life are you most thankful for right now?",
+    "What skill or talent of yours are you grateful to have?",
+    "What's one thing that went better than expected today?",
+    "What's a book, song, or piece of art you're grateful exists?",
+    "What's a mistake that ended up teaching you something good?",
+    "What's one way your life today is better than it was a year ago?",
+    "What's a difficult experience you're grateful you went through?",
+    "What small convenience made today a little easier?",
+    "What's something you're looking forward to that you're grateful for?",
+]
+
+
+def get_daily_prompt(day_of_year: int) -> str:
+    return PROMPTS[day_of_year % len(PROMPTS)]
