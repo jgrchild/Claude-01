@@ -1,5 +1,5 @@
-const CACHE = 'gratitude-v1';
-const SHELL = ['/', '/history', '/static/manifest.json'];
+const CACHE = 'wellness-v1';
+const SHELL = ['/', '/mood', '/worry', '/breathing', '/wins', '/history', '/static/manifest.json'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
@@ -29,7 +29,7 @@ self.addEventListener('fetch', (e) => {
 });
 
 self.addEventListener('push', (e) => {
-  const data = e.data ? e.data.json() : { title: '🌙 Gratitude time', body: "It's time to write today's entry." };
+  const data = e.data ? e.data.json() : { title: '🌿 Wellness', body: 'Time to check in.' };
   e.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,

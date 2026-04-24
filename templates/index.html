@@ -1,191 +1,93 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Jen's Gratitude App (version 1)">
-  <meta name="theme-color" content="#0a1f0f">
-  <title>Jen's Gratitude App (version 1)</title>
-  <link rel="manifest" href="/static/manifest.json">
-  <link rel="apple-touch-icon" href="/static/icon-192.png">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body {
-      background: linear-gradient(160deg, #071a0b, #0f2d17, #1a3a22);
-      min-height: 100vh;
-      min-height: 100dvh;
-      padding-top: env(safe-area-inset-top);
-      padding-bottom: env(safe-area-inset-bottom);
-      padding-left: env(safe-area-inset-left);
-      padding-right: env(safe-area-inset-right);
-    }
-    .glass {
-      background: rgba(255, 255, 255, 0.05);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-    textarea {
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      transition: border-color 0.2s, box-shadow 0.2s;
-    }
-    textarea:focus {
-      outline: none;
-      border-color: rgba(134, 239, 172, 0.5);
-      box-shadow: 0 0 0 3px rgba(134, 239, 172, 0.1);
-    }
-    .save-btn {
-      transition: background-color 0.2s, transform 0.1s;
-    }
-    .save-btn:active { transform: scale(0.97); }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-    .fade-in { animation: fadeIn 0.4s ease both; }
-  </style>
-</head>
-<body class="text-white font-sans antialiased">
-  <div class="max-w-lg mx-auto px-4 py-8 pb-16">
+{% extends "base.html" %}
+{% block title %}Gratitude{% endblock %}
 
-    <!-- Header -->
-    <header class="flex justify-between items-center mb-8 fade-in">
-      <h1 class="text-xl font-semibold text-green-100 tracking-wide">✨ Jen's Gratitude App (version 1)</h1>
-      <div class="flex items-center gap-4">
-        {% if streak > 0 %}
-          <span class="text-sm text-green-300">🔥 {{ streak }}-day streak</span>
-        {% endif %}
-        <a href="/history" class="text-sm text-green-500 hover:text-green-200 transition-colors">History →</a>
-      </div>
-    </header>
+{% block content %}
+<p class="label">{{ today.strftime('%A, %B %-d') }}</p>
+<h1 class="page-title">Evening Gratitude</h1>
 
-    <!-- Main card -->
-    <main class="glass rounded-2xl p-6 mb-4 fade-in" style="animation-delay:0.05s">
-      <p class="text-xs uppercase tracking-widest text-green-500 mb-1">
-        {{ today.strftime('%A, %B %-d') }}
-      </p>
-      <p class="text-base text-green-100 leading-relaxed mb-5">{{ prompt }}</p>
+<div class="card fade-up" style="animation-delay:.05s">
+  <p class="label">Tonight's prompt</p>
+  <p style="color:var(--text);line-height:1.6;margin-bottom:1.25rem;">{{ prompt }}</p>
 
-      <textarea
-        id="entry"
-        rows="5"
-        placeholder="What are you grateful for today?"
-        class="w-full rounded-xl p-4 text-white placeholder-green-700 resize-none text-base leading-relaxed"
-      >{{ entry.content if entry else '' }}</textarea>
+  <textarea id="entry" rows="5" placeholder="What are you grateful for today?">{{ entry.content if entry else '' }}</textarea>
 
-      <div class="flex justify-between items-center mt-4">
-        <span id="status" class="text-sm text-green-400 transition-opacity duration-300"></span>
-        <button
-          id="save-btn"
-          onclick="saveEntry()"
-          class="save-btn px-6 py-2 bg-green-700 hover:bg-green-600 rounded-xl text-white text-sm font-medium"
-        >
-          {% if entry %}Update{% else %}Save{% endif %}
-        </button>
-      </div>
-    </main>
-
-    <!-- Notification banner -->
-    <div id="notif-banner" class="glass rounded-2xl p-4 fade-in hidden" style="animation-delay:0.1s">
-      <div class="flex justify-between items-center gap-3">
-        <p class="text-sm text-green-300">🔔 Get a reminder at 9pm each evening?</p>
-        <button
-          onclick="enableNotifications()"
-          class="shrink-0 px-4 py-1.5 bg-green-700 hover:bg-green-600 rounded-lg text-white text-xs font-medium transition-colors"
-        >Enable</button>
-      </div>
-    </div>
-
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.875rem;">
+    <span id="status" style="font-size:.8rem;color:var(--sage);transition:opacity .3s;"></span>
+    <button id="save-btn" onclick="saveEntry()" class="btn btn-primary">
+      {% if entry %}Update{% else %}Save{% endif %}
+    </button>
   </div>
+</div>
 
-  <script>
-    const VAPID_PUBLIC_KEY = {{ vapid_public_key | tojson }};
+{% if streak > 0 %}
+<div class="card fade-up" style="animation-delay:.1s;margin-top:.75rem;display:flex;align-items:center;gap:.75rem;">
+  <span style="font-size:1.5rem;">🔥</span>
+  <span style="font-size:.875rem;color:var(--text-soft);">{{ streak_msg }}</span>
+</div>
+{% endif %}
 
-    // ── save entry ──────────────────────────────────────────────────────────
+<div id="notif-banner" class="card fade-up hidden" style="animation-delay:.15s;margin-top:.75rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;">
+    <p style="font-size:.875rem;color:var(--text-soft);">🔔 Enable daily reminders?</p>
+    <button onclick="enableNotifications()" class="btn btn-primary" style="white-space:nowrap;padding:.5rem 1rem;font-size:.8rem;">Enable</button>
+  </div>
+</div>
+{% endblock %}
 
-    async function saveEntry() {
-      const content = document.getElementById('entry').value.trim();
-      if (!content) return;
+{% block scripts %}
+<script>
+const VAPID_PUBLIC_KEY = {{ vapid_public_key | tojson }};
 
-      const btn = document.getElementById('save-btn');
-      const status = document.getElementById('status');
-      btn.disabled = true;
-      btn.textContent = 'Saving…';
-
-      try {
-        const res = await fetch('/entry', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          btn.textContent = 'Update';
-          status.textContent = data.streak_msg;
-          setTimeout(() => { status.textContent = ''; }, 4000);
-        } else {
-          status.textContent = data.error || 'Something went wrong.';
-          btn.textContent = 'Save';
-        }
-      } catch {
-        status.textContent = 'Network error – try again.';
-        btn.textContent = 'Save';
-      } finally {
-        btn.disabled = false;
-      }
+async function saveEntry() {
+  const content = document.getElementById('entry').value.trim();
+  if (!content) return;
+  const btn = document.getElementById('save-btn');
+  const status = document.getElementById('status');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const res = await fetch('/entry', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({content}) });
+    const data = await res.json();
+    if (res.ok) {
+      btn.textContent = 'Update';
+      status.textContent = data.streak_msg;
+      setTimeout(() => { status.textContent = ''; }, 4000);
+    } else {
+      status.textContent = data.error || 'Something went wrong.';
+      btn.textContent = 'Save';
     }
+  } catch { status.textContent = 'Network error.'; btn.textContent = 'Save'; }
+  finally { btn.disabled = false; }
+}
 
-    // Save on Ctrl/Cmd+Enter
-    document.getElementById('entry').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveEntry();
-    });
+document.getElementById('entry').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveEntry();
+});
 
-    // ── push notifications ──────────────────────────────────────────────────
+function urlBase64ToUint8Array(b) {
+  const pad = '='.repeat((4 - b.length % 4) % 4);
+  const base64 = (b + pad).replace(/-/g,'+').replace(/_/g,'/');
+  return Uint8Array.from([...atob(base64)].map(c => c.charCodeAt(0)));
+}
 
-    function urlBase64ToUint8Array(base64String) {
-      const padding = '='.repeat((4 - base64String.length % 4) % 4);
-      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-      const rawData = atob(base64);
-      return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
-    }
+async function enableNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+    await fetch('/subscribe', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(sub) });
+    document.getElementById('notif-banner').classList.add('hidden');
+  } catch(e) { console.error(e); }
+}
 
-    async function enableNotifications() {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        alert('Push notifications are not supported in this browser.');
-        return;
-      }
-
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') return;
-
-      try {
-        const reg = await navigator.serviceWorker.ready;
-        const subscription = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-        });
-        await fetch('/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(subscription),
-        });
-        document.getElementById('notif-banner').classList.add('hidden');
-      } catch (err) {
-        console.error('Subscription failed:', err);
-      }
-    }
-
-    async function initNotifications() {
-      if (!VAPID_PUBLIC_KEY || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
-
-      await navigator.serviceWorker.register('/static/sw.js');
-
-      if (Notification.permission === 'default') {
-        document.getElementById('notif-banner').classList.remove('hidden');
-      }
-    }
-
-    initNotifications();
-  </script>
-</body>
-</html>
+async function initNotifications() {
+  if (!VAPID_PUBLIC_KEY || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  await navigator.serviceWorker.register('/static/sw.js');
+  if (Notification.permission === 'default') {
+    document.getElementById('notif-banner').classList.remove('hidden');
+  }
+}
+initNotifications();
+</script>
+{% endblock %}

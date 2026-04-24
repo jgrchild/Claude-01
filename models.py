@@ -33,6 +33,36 @@ class GratitudeEntry(Base):
     user = relationship("User", back_populates="entries")
 
 
+class MoodEntry(Base):
+    __tablename__ = "mood_entries"
+
+    id = Column(Integer, primary_key=True)
+    date = Column(Date, nullable=False, unique=True)
+    rating = Column(Integer, nullable=False)  # 1–5
+    note = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class WorryEntry(Base):
+    __tablename__ = "worry_entries"
+
+    id = Column(Integer, primary_key=True)
+    date = Column(Date, nullable=False)
+    content = Column(Text, nullable=False)
+    reframe = Column(Text)
+    resolved = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class WinEntry(Base):
+    __tablename__ = "win_entries"
+
+    id = Column(Integer, primary_key=True)
+    date = Column(Date, nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class PushSubscription(Base):
     __tablename__ = "push_subscriptions"
 

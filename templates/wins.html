@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Wins{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Wins Log</h1>
+
+<div class="card fade-up">
+  <p class="label">What went well today?</p>
+  <p style="font-size:.8rem;color:var(--text-dim);margin-bottom:.875rem;">Big or small — it all counts.</p>
+  <textarea id="win-text" rows="3" placeholder="I did something good today…"></textarea>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.875rem;">
+    <span id="win-response" style="font-size:.85rem;color:var(--sage);line-height:1.4;max-width:65%;"></span>
+    <button onclick="saveWin()" class="btn btn-primary" id="win-save-btn">Log it</button>
+  </div>
+</div>
+
+{% if recent_wins %}
+<div style="margin-top:1.25rem;">
+  <p class="label" style="margin-bottom:.5rem;">This week</p>
+  <div style="display:flex;flex-direction:column;gap:.5rem;">
+    {% for win in recent_wins %}
+    <div class="card fade-up" style="animation-delay:{{ loop.index0 * 0.04 }}s;display:flex;gap:.75rem;align-items:flex-start;">
+      <span style="font-size:1.1rem;margin-top:.1rem;">⭐</span>
+      <div>
+        <p style="font-size:.9rem;color:var(--text);line-height:1.5;">{{ win.content }}</p>
+        <p style="font-size:.7rem;color:var(--text-dim);margin-top:.25rem;">{{ win.date.strftime('%A, %b %-d') }}</p>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="card fade-up" style="animation-delay:.08s;margin-top:.75rem;text-align:center;padding:2rem;">
+  <p style="font-size:1.5rem;margin-bottom:.5rem;">🌱</p>
+  <p style="font-size:.875rem;color:var(--text-soft);">No wins logged this week yet.</p>
+  <p style="font-size:.8rem;color:var(--text-dim);margin-top:.25rem;">Start with something small.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function saveWin() {
+  const content = document.getElementById('win-text').value.trim();
+  if (!content) return;
+  const btn = document.getElementById('win-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const res = await fetch('/api/wins', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ content })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('win-text').value = '';
+      document.getElementById('win-response').textContent = data.response;
+      btn.textContent = 'Log it';
+      setTimeout(() => location.reload(), 1500);
+    }
+  } catch { btn.textContent = 'Log it'; }
+  finally { btn.disabled = false; }
+}
+</script>
+{% endblock %}

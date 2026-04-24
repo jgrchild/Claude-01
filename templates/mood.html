@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Mood{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Mood Check-in</h1>
+
+<div class="card fade-up">
+  <p class="label">How are you feeling today?</p>
+  <div id="emoji-row" style="display:flex;justify-content:space-between;margin:.875rem 0;">
+    {% for rating, emoji in mood_emojis.items() %}
+    <button
+      onclick="selectMood({{ rating }})"
+      id="mood-{{ rating }}"
+      style="
+        font-size:2rem;padding:.5rem;border-radius:.75rem;
+        border:2px solid {% if today_mood and today_mood.rating == rating %}rgba(125,184,138,0.6){% else %}transparent{% endif %};
+        background:{% if today_mood and today_mood.rating == rating %}var(--sage-dim){% else %}transparent{% endif %};
+        transition:all .15s;cursor:pointer;
+      "
+    >{{ emoji }}</button>
+    {% endfor %}
+  </div>
+
+  <div id="note-section" style="{% if not today_mood %}display:none;{% endif %}margin-top:.5rem;">
+    <input type="text" id="mood-note" placeholder="Add a note (optional)"
+           value="{{ today_mood.note if today_mood and today_mood.note else '' }}">
+    <div style="display:flex;justify-content:flex-end;margin-top:.75rem;">
+      <button onclick="saveMood()" class="btn btn-primary" id="mood-save-btn">Save</button>
+    </div>
+  </div>
+  <p id="mood-status" style="font-size:.8rem;color:var(--sage);min-height:1.25rem;margin-top:.5rem;"></p>
+</div>
+
+<div class="card fade-up" style="animation-delay:.08s;margin-top:.75rem;">
+  <p class="label" style="margin-bottom:.875rem;">This week</p>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;">
+    {% for d in week_days %}
+    {% set entry = week_map.get(d) %}
+    <div style="display:flex;flex-direction:column;align-items:center;gap:.3rem;">
+      {% if entry %}
+        <span style="font-size:1.25rem;">{{ mood_emojis[entry.rating] }}</span>
+      {% else %}
+        <span style="width:1.5rem;height:1.5rem;border-radius:50%;background:var(--border);display:block;"></span>
+      {% endif %}
+      <span style="font-size:.6rem;color:var(--text-dim);">{{ d.strftime('%-d') }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedRating = {{ today_mood.rating if today_mood else 'null' }};
+
+function selectMood(rating) {
+  selectedRating = rating;
+  document.querySelectorAll('[id^="mood-"]').forEach(btn => {
+    const r = parseInt(btn.id.split('-')[1]);
+    btn.style.border = r === rating ? '2px solid rgba(125,184,138,0.6)' : '2px solid transparent';
+    btn.style.background = r === rating ? 'var(--sage-dim)' : 'transparent';
+  });
+  document.getElementById('note-section').style.display = 'block';
+}
+
+async function saveMood() {
+  if (!selectedRating) return;
+  const note = document.getElementById('mood-note').value.trim();
+  const btn = document.getElementById('mood-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const res = await fetch('/api/mood', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ rating: selectedRating, note })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('mood-status').textContent = `Logged ${data.emoji} for today.`;
+      btn.textContent = 'Update';
+    }
+  } catch { document.getElementById('mood-status').textContent = 'Network error.'; }
+  finally { btn.disabled = false; }
+}
+</script>
+{% endblock %}

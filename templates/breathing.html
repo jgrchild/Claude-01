@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Breathe{% endblock %}
+
+{% block head %}
+<style>
+  #breath-circle {
+    width: 140px; height: 140px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 40%, rgba(125,184,138,0.25), rgba(125,184,138,0.05));
+    border: 1.5px solid rgba(125,184,138,0.3);
+    display: flex; align-items: center; justify-content: center;
+    transition: width 4s ease-in-out, height 4s ease-in-out, opacity 1s ease;
+    will-change: width, height;
+  }
+  #breath-ring {
+    position: absolute;
+    width: 160px; height: 160px;
+    border-radius: 50%;
+    border: 1px solid rgba(125,184,138,0.12);
+    transition: width 4s ease-in-out, height 4s ease-in-out;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Box Breathing</h1>
+
+<div style="text-align:center;padding:1rem 0 1.5rem;">
+  <p id="phase-label" style="font-size:1.1rem;color:var(--text-soft);letter-spacing:.05em;min-height:1.75rem;margin-bottom:2rem;transition:opacity .5s;">
+    Press Begin when you're ready
+  </p>
+
+  <div style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:220px;height:220px;">
+    <div id="breath-ring"></div>
+    <div id="breath-circle">
+      <span id="countdown" style="font-size:2.5rem;font-weight:200;color:rgba(125,184,138,0.8);"></span>
+    </div>
+  </div>
+
+  <div style="margin-top:2.5rem;">
+    <button id="start-btn" onclick="toggleBreathing()" class="btn btn-primary" style="padding:.75rem 2.5rem;font-size:1rem;">
+      Begin
+    </button>
+  </div>
+
+  <p style="margin-top:1.5rem;font-size:.75rem;color:var(--text-dim);max-width:240px;margin-left:auto;margin-right:auto;line-height:1.6;">
+    Inhale · Hold · Exhale · Hold<br>4 counts each
+  </p>
+</div>
+
+<div class="card fade-up" style="animation-delay:.1s;margin-top:.5rem;">
+  <p class="label" style="margin-bottom:.5rem;">Why it helps</p>
+  <p style="font-size:.8rem;color:var(--text-soft);line-height:1.6;">
+    Box breathing slows your heart rate and signals your nervous system that you're safe. Even two minutes makes a difference.
+  </p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PHASES = [
+  { name: 'Inhale',  count: 4, big: true  },
+  { name: 'Hold',    count: 4, big: true  },
+  { name: 'Exhale',  count: 4, big: false },
+  { name: 'Hold',    count: 4, big: false },
+];
+
+let running = false;
+let phaseIdx = 0;
+let secondsLeft = 4;
+let timer = null;
+
+const circle = document.getElementById('breath-circle');
+const ring   = document.getElementById('breath-ring');
+const label  = document.getElementById('phase-label');
+const count  = document.getElementById('countdown');
+const btn    = document.getElementById('start-btn');
+
+function applyPhase() {
+  const p = PHASES[phaseIdx];
+  label.textContent = p.name;
+  count.textContent = secondsLeft;
+  const bigSize  = '180px';
+  const smSize   = '120px';
+  const bigRing  = '210px';
+  const smRing   = '150px';
+  circle.style.width  = p.big ? bigSize  : smSize;
+  circle.style.height = p.big ? bigSize  : smSize;
+  ring.style.width    = p.big ? bigRing  : smRing;
+  ring.style.height   = p.big ? bigRing  : smRing;
+}
+
+function tick() {
+  secondsLeft--;
+  count.textContent = secondsLeft;
+  if (secondsLeft <= 0) {
+    phaseIdx = (phaseIdx + 1) % 4;
+    secondsLeft = PHASES[phaseIdx].count;
+    applyPhase();
+  } else {
+    count.textContent = secondsLeft;
+  }
+}
+
+function toggleBreathing() {
+  if (running) {
+    clearInterval(timer);
+    running = false;
+    btn.textContent = 'Begin';
+    label.textContent = 'Press Begin when you\'re ready';
+    count.textContent = '';
+    circle.style.width = '140px'; circle.style.height = '140px';
+    ring.style.width   = '160px'; ring.style.height   = '160px';
+  } else {
+    running = true;
+    phaseIdx = 0;
+    secondsLeft = PHASES[0].count;
+    btn.textContent = 'Stop';
+    applyPhase();
+    timer = setInterval(tick, 1000);
+  }
+}
+</script>
+{% endblock %}

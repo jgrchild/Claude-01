@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Worry Time{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Worry Time</h1>
+
+<div class="card fade-up">
+  <p class="label">What's on your mind?</p>
+  <p style="font-size:.8rem;color:var(--text-dim);margin-bottom:.875rem;">This is your space. Get it out.</p>
+  <textarea id="worry-text" rows="4" placeholder="Write your worry here…"></textarea>
+
+  <div id="reframe-section" style="display:none;margin-top:1rem;">
+    <p style="font-size:.875rem;color:var(--text-soft);margin-bottom:.5rem;">💚 What part of this is in your control?</p>
+    <textarea id="reframe-text" rows="3" placeholder="Even a small thing counts…"></textarea>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.875rem;">
+    <span id="worry-status" style="font-size:.8rem;color:var(--sage);"></span>
+    <div style="display:flex;gap:.5rem;">
+      <button id="reframe-btn" onclick="showReframe()" class="btn btn-ghost" style="display:none;font-size:.8rem;padding:.5rem 1rem;">Reframe</button>
+      <button onclick="saveWorry()" class="btn btn-primary" id="worry-save-btn">Add</button>
+    </div>
+  </div>
+</div>
+
+{% if open_worries %}
+<div style="margin-top:1.25rem;">
+  <p class="label" style="margin-bottom:.5rem;">Open worries</p>
+  <div style="display:flex;flex-direction:column;gap:.5rem;">
+    {% for w in open_worries %}
+    <div class="card fade-up" id="worry-{{ w.id }}" style="animation-delay:{{ loop.index0 * 0.04 }}s">
+      <p style="font-size:.9rem;color:var(--text);line-height:1.5;">{{ w.content }}</p>
+      {% if w.reframe %}
+      <p style="font-size:.8rem;color:var(--text-soft);margin-top:.5rem;padding-top:.5rem;border-top:1px solid var(--border);">
+        💚 {{ w.reframe }}
+      </p>
+      {% endif %}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.75rem;">
+        <span style="font-size:.7rem;color:var(--text-dim);">{{ w.date.strftime('%b %-d') }}</span>
+        <button onclick="resolveWorry({{ w.id }})" class="btn btn-ghost" style="font-size:.75rem;padding:.375rem .875rem;">
+          Mark resolved ✓
+        </button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if resolved_worries %}
+<div style="margin-top:1.25rem;">
+  <p class="label" style="margin-bottom:.5rem;">Resolved</p>
+  <div style="display:flex;flex-direction:column;gap:.5rem;">
+    {% for w in resolved_worries %}
+    <div class="card" style="opacity:.45;">
+      <p style="font-size:.85rem;color:var(--text);line-height:1.5;text-decoration:line-through;">{{ w.content }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showReframe() {
+  document.getElementById('reframe-section').style.display = 'block';
+  document.getElementById('reframe-btn').style.display = 'none';
+}
+
+async function saveWorry() {
+  const content = document.getElementById('worry-text').value.trim();
+  if (!content) return;
+  const reframe = document.getElementById('reframe-text').value.trim();
+  const btn = document.getElementById('worry-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const res = await fetch('/api/worry', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ content, reframe })
+    });
+    if (res.ok) {
+      document.getElementById('worry-text').value = '';
+      document.getElementById('reframe-text').value = '';
+      document.getElementById('reframe-section').style.display = 'none';
+      document.getElementById('reframe-btn').style.display = 'none';
+      document.getElementById('worry-status').textContent = 'Logged. You can let that sit here now.';
+      setTimeout(() => location.reload(), 1200);
+    }
+  } catch { document.getElementById('worry-status').textContent = 'Network error.'; }
+  finally { btn.disabled = false; btn.textContent = 'Add'; }
+}
+
+document.getElementById('worry-text').addEventListener('input', () => {
+  const btn = document.getElementById('reframe-btn');
+  btn.style.display = document.getElementById('worry-text').value.trim() ? 'inline-flex' : 'none';
+});
+
+async function resolveWorry(id) {
+  const res = await fetch(`/api/worry/${id}/resolve`, { method:'POST' });
+  if (res.ok) {
+    const el = document.getElementById(`worry-${id}`);
+    el.style.transition = 'opacity .3s, transform .3s';
+    el.style.opacity = '0'; el.style.transform = 'translateX(20px)';
+    setTimeout(() => el.remove(), 350);
+  }
+}
+</script>
+{% endblock %}

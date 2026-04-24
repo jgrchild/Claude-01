@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Jen's Gratitude App (version 1)">
+  <meta name="theme-color" content="#0a1f0f">
+  <title>{% block title %}Wellness{% endblock %}</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --sage: #7db88a;
+      --sage-dim: rgba(125,184,138,0.15);
+      --lavender: #a89bc7;
+      --lavender-dim: rgba(168,155,199,0.15);
+      --text: #e8f0ea;
+      --text-soft: #8aad93;
+      --text-dim: rgba(255,255,255,0.35);
+      --glass: rgba(255,255,255,0.05);
+      --border: rgba(255,255,255,0.08);
+      --nav-h: 64px;
+    }
+    * { -webkit-tap-highlight-color: transparent; }
+    body {
+      background: linear-gradient(160deg, #071a0b, #0f2d17, #1a3a22);
+      min-height: 100dvh;
+      padding-top: env(safe-area-inset-top);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+      padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .glass {
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+    }
+    .page { max-width: 480px; margin: 0 auto; padding: 1.5rem 1rem 1rem; }
+    .page-title { font-size: 1.1rem; font-weight: 600; color: var(--text); letter-spacing: 0.01em; margin-bottom: 1.25rem; }
+    .card { background: var(--glass); border: 1px solid var(--border); border-radius: 1rem; padding: 1.25rem; }
+    .label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-soft); margin-bottom: 0.35rem; }
+    textarea, input[type="text"] {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 0.875rem 1rem;
+      color: var(--text);
+      font-size: 1rem;
+      line-height: 1.5;
+      resize: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    textarea::placeholder, input::placeholder { color: rgba(255,255,255,0.25); }
+    textarea:focus, input:focus {
+      outline: none;
+      border-color: rgba(125,184,138,0.5);
+      box-shadow: 0 0 0 3px rgba(125,184,138,0.1);
+    }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 0.625rem 1.5rem;
+      border-radius: 0.75rem;
+      font-size: 0.875rem; font-weight: 500;
+      transition: background-color 0.15s, transform 0.1s;
+      cursor: pointer;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: #2d6a40; color: var(--text); border: 1px solid rgba(125,184,138,0.2); }
+    .btn-primary:hover { background: #366b47; }
+    .btn-ghost { background: transparent; color: var(--text-soft); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--glass); }
+    @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    .fade-up { animation: fadeUp 0.35s ease both; }
+
+    /* Bottom nav */
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+      background: rgba(7,26,11,0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid var(--border);
+      padding-bottom: env(safe-area-inset-bottom);
+      height: calc(var(--nav-h) + env(safe-area-inset-bottom));
+      display: flex; align-items: flex-start;
+    }
+    .nav-inner {
+      width: 100%; max-width: 480px; margin: 0 auto;
+      display: flex; justify-content: space-around; align-items: center;
+      height: var(--nav-h); padding: 0 0.25rem;
+    }
+    .nav-item {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 0.5rem 0.75rem; border-radius: 0.75rem;
+      text-decoration: none; transition: opacity 0.15s;
+      min-width: 56px;
+    }
+    .nav-item .nav-icon { font-size: 1.375rem; line-height: 1; }
+    .nav-item .nav-label { font-size: 0.625rem; letter-spacing: 0.03em; }
+    .nav-item.active .nav-label { color: var(--sage); }
+    .nav-item.active .nav-icon { filter: drop-shadow(0 0 6px rgba(125,184,138,0.6)); }
+    .nav-item:not(.active) { opacity: 0.4; }
+    .nav-item:not(.active):hover { opacity: 0.7; }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+  <div class="page fade-up">
+    {% block content %}{% endblock %}
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-item {% if active == 'gratitude' %}active{% endif %}">
+        <span class="nav-icon">✨</span>
+        <span class="nav-label">Gratitude</span>
+      </a>
+      <a href="/mood" class="nav-item {% if active == 'mood' %}active{% endif %}">
+        <span class="nav-icon">🌤</span>
+        <span class="nav-label">Mood</span>
+      </a>
+      <a href="/worry" class="nav-item {% if active == 'worry' %}active{% endif %}">
+        <span class="nav-icon">💭</span>
+        <span class="nav-label">Worry</span>
+      </a>
+      <a href="/breathing" class="nav-item {% if active == 'breathing' %}active{% endif %}">
+        <span class="nav-icon">🌬</span>
+        <span class="nav-label">Breathe</span>
+      </a>
+      <a href="/wins" class="nav-item {% if active == 'wins' %}active{% endif %}">
+        <span class="nav-icon">⭐</span>
+        <span class="nav-label">Wins</span>
+      </a>
+    </div>
+  </nav>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

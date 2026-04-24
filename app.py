@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import random
 from datetime import date, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -10,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import config
-from models import Base, GratitudeEntry, PushSubscription, User
+from models import Base, GratitudeEntry, MoodEntry, PushSubscription, User, WinEntry, WorryEntry
 from prompts import get_daily_prompt
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -22,6 +23,21 @@ app.secret_key = config.SECRET_KEY
 engine = create_engine(config.DATABASE_URL, connect_args={"check_same_thread": False})
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
+
+MOOD_EMOJIS = {1: "😔", 2: "😕", 3: "😐", 4: "🙂", 5: "😊"}
+
+WIN_RESPONSES = [
+    "That's worth celebrating. 🌱",
+    "Look at you go. ⭐",
+    "Every win counts, no matter the size.",
+    "You showed up. That matters. 💚",
+    "Progress is progress. Keep going.",
+    "Noted and celebrated.",
+    "That's a real win. Be proud.",
+    "Small steps add up. Great work.",
+    "You're doing better than you think. 🌿",
+    "That deserves a moment of recognition.",
+]
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -76,27 +92,41 @@ def send_push(subscription_info: dict, title: str, body: str):
         log.error("Push notification failed: %s", e)
 
 
-def send_nightly_notification():
-    today = date.today()
-    prompt = get_daily_prompt(today.timetuple().tm_yday)
-
+def _broadcast(title: str, body: str):
     session = Session()
     try:
         subs = session.query(PushSubscription).all()
         for sub in subs:
-            send_push(json.loads(sub.subscription_json), "🌙 Gratitude time", prompt)
-        log.info("Sent nightly notification to %d subscribers", len(subs))
+            send_push(json.loads(sub.subscription_json), title, body)
+        log.info("Broadcast '%s' to %d subscribers", title, len(subs))
     finally:
         session.close()
 
 
-# ── routes ────────────────────────────────────────────────────────────────────
+def send_morning_notification():
+    _broadcast("🌤 Good morning", "How are you feeling today? Take a moment to check in.")
+
+
+def send_midday_notification():
+    _broadcast("🌬 Midday breather", "Time for a quick breathing break. Just two minutes.")
+
+
+def send_worry_notification():
+    _broadcast("💭 Worry time", "Got something on your mind? This is your space to process it.")
+
+
+def send_nightly_notification():
+    today = date.today()
+    prompt = get_daily_prompt(today.timetuple().tm_yday)
+    _broadcast("🌙 Evening gratitude", prompt)
+
+
+# ── gratitude ─────────────────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
     today = date.today()
     prompt = get_daily_prompt(today.timetuple().tm_yday)
-
     session = Session()
     try:
         user = get_or_create_user(session)
@@ -104,6 +134,7 @@ def index():
         streak = get_streak(session, user)
         return render_template(
             "index.html",
+            active="gratitude",
             today=today,
             prompt=prompt,
             entry=entry,
@@ -120,7 +151,6 @@ def save_entry():
     content = (request.json or {}).get("content", "").strip()
     if not content:
         return jsonify({"error": "Entry cannot be empty"}), 400
-
     today = date.today()
     session = Session()
     try:
@@ -153,6 +183,7 @@ def history():
         streak = get_streak(session, user)
         return render_template(
             "history.html",
+            active="gratitude",
             entries=entries,
             streak=streak,
             streak_msg=streak_msg(streak),
@@ -161,12 +192,165 @@ def history():
         session.close()
 
 
+# ── mood ──────────────────────────────────────────────────────────────────────
+
+@app.route("/mood")
+def mood():
+    today = date.today()
+    week_ago = today - timedelta(days=6)
+    session = Session()
+    try:
+        today_mood = session.query(MoodEntry).filter_by(date=today).first()
+        week_moods = (
+            session.query(MoodEntry)
+            .filter(MoodEntry.date >= week_ago)
+            .order_by(MoodEntry.date)
+            .all()
+        )
+        week_map = {m.date: m for m in week_moods}
+        week_days = [today - timedelta(days=i) for i in range(6, -1, -1)]
+        return render_template(
+            "mood.html",
+            active="mood",
+            today=today,
+            today_mood=today_mood,
+            week_days=week_days,
+            week_map=week_map,
+            mood_emojis=MOOD_EMOJIS,
+        )
+    finally:
+        session.close()
+
+
+@app.route("/api/mood", methods=["POST"])
+def save_mood():
+    data = request.json or {}
+    rating = data.get("rating")
+    note = data.get("note", "").strip()
+    if not rating or int(rating) not in range(1, 6):
+        return jsonify({"error": "Rating must be 1-5"}), 400
+    session = Session()
+    try:
+        today = date.today()
+        entry = session.query(MoodEntry).filter_by(date=today).first()
+        if entry:
+            entry.rating = int(rating)
+            entry.note = note or None
+        else:
+            session.add(MoodEntry(date=today, rating=int(rating), note=note or None))
+        session.commit()
+        return jsonify({"ok": True, "emoji": MOOD_EMOJIS[int(rating)]})
+    finally:
+        session.close()
+
+
+# ── worry ─────────────────────────────────────────────────────────────────────
+
+@app.route("/worry")
+def worry():
+    session = Session()
+    try:
+        open_worries = (
+            session.query(WorryEntry)
+            .filter_by(resolved=False)
+            .order_by(WorryEntry.created_at.desc())
+            .all()
+        )
+        resolved_worries = (
+            session.query(WorryEntry)
+            .filter_by(resolved=True)
+            .order_by(WorryEntry.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        return render_template(
+            "worry.html",
+            active="worry",
+            open_worries=open_worries,
+            resolved_worries=resolved_worries,
+        )
+    finally:
+        session.close()
+
+
+@app.route("/api/worry", methods=["POST"])
+def save_worry():
+    data = request.json or {}
+    content = data.get("content", "").strip()
+    reframe = data.get("reframe", "").strip()
+    if not content:
+        return jsonify({"error": "Content required"}), 400
+    session = Session()
+    try:
+        entry = WorryEntry(date=date.today(), content=content, reframe=reframe or None)
+        session.add(entry)
+        session.commit()
+        return jsonify({"ok": True, "id": entry.id})
+    finally:
+        session.close()
+
+
+@app.route("/api/worry/<int:worry_id>/resolve", methods=["POST"])
+def resolve_worry(worry_id):
+    session = Session()
+    try:
+        entry = session.query(WorryEntry).filter_by(id=worry_id).first()
+        if not entry:
+            return jsonify({"error": "Not found"}), 404
+        entry.resolved = True
+        session.commit()
+        return jsonify({"ok": True})
+    finally:
+        session.close()
+
+
+# ── wins ──────────────────────────────────────────────────────────────────────
+
+@app.route("/wins")
+def wins():
+    today = date.today()
+    week_ago = today - timedelta(days=6)
+    session = Session()
+    try:
+        recent_wins = (
+            session.query(WinEntry)
+            .filter(WinEntry.date >= week_ago)
+            .order_by(WinEntry.created_at.desc())
+            .all()
+        )
+        return render_template("wins.html", active="wins", today=today, recent_wins=recent_wins)
+    finally:
+        session.close()
+
+
+@app.route("/api/wins", methods=["POST"])
+def save_win():
+    content = (request.json or {}).get("content", "").strip()
+    if not content:
+        return jsonify({"error": "Content required"}), 400
+    session = Session()
+    try:
+        session.add(WinEntry(date=date.today(), content=content))
+        session.commit()
+        return jsonify({"ok": True, "response": random.choice(WIN_RESPONSES)})
+    finally:
+        session.close()
+
+
+# ── breathing ─────────────────────────────────────────────────────────────────
+
+@app.route("/breathing")
+def breathing():
+    return render_template("breathing.html", active="breathing")
+
+
+# ── push subscription ─────────────────────────────────────────────────────────
+
 @app.route("/subscribe", methods=["POST"])
 def subscribe():
     sub_data = request.json
     if not sub_data:
         return jsonify({"error": "No subscription data"}), 400
-
     sub_json = json.dumps(sub_data, sort_keys=True)
     session = Session()
     try:
@@ -175,7 +359,6 @@ def subscribe():
             session.commit()
     finally:
         session.close()
-
     return jsonify({"ok": True})
 
 
@@ -188,20 +371,16 @@ def health():
 
 def start_scheduler() -> BackgroundScheduler:
     scheduler = BackgroundScheduler(timezone=config.TIMEZONE)
-    scheduler.add_job(
-        send_nightly_notification,
-        "cron",
-        hour=config.NIGHTLY_HOUR,
-        minute=config.NIGHTLY_MINUTE,
-        id="nightly",
-    )
+    scheduler.add_job(send_morning_notification, "cron",
+                      hour=config.MORNING_HOUR, minute=config.MORNING_MINUTE, id="morning")
+    scheduler.add_job(send_midday_notification, "cron",
+                      hour=config.MIDDAY_HOUR, minute=config.MIDDAY_MINUTE, id="midday")
+    scheduler.add_job(send_worry_notification, "cron",
+                      hour=config.WORRY_HOUR, minute=config.WORRY_MINUTE, id="worry")
+    scheduler.add_job(send_nightly_notification, "cron",
+                      hour=config.NIGHTLY_HOUR, minute=config.NIGHTLY_MINUTE, id="nightly")
     scheduler.start()
-    log.info(
-        "Scheduler started – nightly notification at %02d:%02d %s",
-        config.NIGHTLY_HOUR,
-        config.NIGHTLY_MINUTE,
-        config.TIMEZONE,
-    )
+    log.info("Scheduler started — 4 daily notifications configured")
     return scheduler
 
 
