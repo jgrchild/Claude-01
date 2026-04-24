@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% block title %}Worry Session{% endblock %}
+
+{% block head %}
+<style>
+  @keyframes floatAway {
+    0%   { opacity:1; transform:translateY(0) scale(1); filter:blur(0); }
+    35%  { opacity:.7; transform:translateY(-12px) scale(1.02); filter:blur(0); }
+    100% { opacity:0; transform:translateY(-70px) scale(.88); filter:blur(4px); }
+  }
+  .float-away { animation: floatAway 1.4s ease-out forwards; }
+
+  .classify-btn {
+    width:100%; padding:1rem 1.25rem; border-radius:.875rem; text-align:left;
+    border:1px solid var(--border); background:var(--glass);
+    color:var(--text); font-size:.9rem; line-height:1.4;
+    cursor:pointer; transition:background .15s, border-color .15s;
+    display:flex; align-items:flex-start; gap:.75rem;
+  }
+  .classify-btn:active { transform:scale(.98); }
+  .classify-btn.real:hover   { background:var(--sage-dim); border-color:rgba(125,184,138,.35); }
+  .classify-btn.hypo:hover   { background:var(--lavender-dim); border-color:rgba(168,155,199,.35); }
+  .classify-btn .btn-icon    { font-size:1.25rem; line-height:1; margin-top:.1rem; flex-shrink:0; }
+  .classify-btn .btn-body    { display:flex; flex-direction:column; gap:.2rem; }
+  .classify-btn .btn-title   { font-weight:500; }
+  .classify-btn .btn-sub     { font-size:.75rem; color:var(--text-soft); }
+
+  #timer-pill { transition: background .3s, border-color .3s; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Top bar: exit + timer -->
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+  <a href="/worry" style="font-size:.875rem;color:var(--text-soft);text-decoration:none;">← Exit</a>
+  <div id="timer-pill" style="display:flex;align-items:center;gap:.4rem;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:2rem;padding:.35rem .875rem;">
+    <span style="font-size:.8rem;">⏱</span>
+    <span id="timer-display" style="font-size:1rem;font-weight:600;color:var(--text);letter-spacing:.06em;font-variant-numeric:tabular-nums;">20:00</span>
+  </div>
+</div>
+
+<!-- Warning banner (hidden until 2 min left) -->
+<div id="warn-banner" hidden style="margin-bottom:.875rem;padding:.625rem 1rem;border-radius:.75rem;background:rgba(232,192,104,0.1);border:1px solid rgba(232,192,104,0.2);">
+  <p style="font-size:.8rem;color:#e8c068;">Almost time — finish up this worry and wrap the session.</p>
+</div>
+
+{% if worry_count == 0 %}
+<!-- No worries state -->
+<div class="card" style="text-align:center;padding:3rem 1.5rem;">
+  <p style="font-size:2rem;margin-bottom:.75rem;">🌿</p>
+  <p style="color:var(--text);font-size:1rem;font-weight:500;">You're all clear.</p>
+  <p style="color:var(--text-soft);font-size:.875rem;margin-top:.4rem;">No open worries right now.</p>
+  <a href="/worry" class="btn btn-primary" style="display:inline-flex;margin-top:1.25rem;">Back to Worry Time</a>
+</div>
+{% else %}
+
+<!-- Session card -->
+<div id="session-card" class="card">
+
+  <!-- Progress -->
+  <p id="progress-label" class="label" style="margin-bottom:.875rem;">Worry 1 of {{ worry_count }}</p>
+
+  <!-- Worry text -->
+  <div id="worry-display" style="margin-bottom:1.25rem;padding:.875rem 1rem;border-radius:.75rem;background:rgba(255,255,255,0.03);border:1px solid var(--border);">
+    <p id="worry-text" style="font-size:.95rem;color:var(--text);line-height:1.6;"></p>
+    <p id="worry-date" style="font-size:.7rem;color:var(--text-dim);margin-top:.4rem;"></p>
+  </div>
+
+  <!-- Step: Read -->
+  <div id="step-read">
+    <p style="font-size:.8rem;color:var(--text-soft);margin-bottom:.875rem;">Take a moment with this. When you're ready, classify it.</p>
+    <button onclick="goClassify()" class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:.5rem;">
+      Classify this worry →
+    </button>
+    <button onclick="skipCurrent()" class="btn btn-ghost" style="width:100%;justify-content:center;font-size:.8rem;">
+      Skip for now
+    </button>
+  </div>
+
+  <!-- Step: Classify -->
+  <div id="step-classify" hidden>
+    <p style="font-size:.8rem;color:var(--text-soft);margin-bottom:.875rem;">What kind of worry is this?</p>
+    <div style="display:flex;flex-direction:column;gap:.625rem;">
+      <button class="classify-btn real" onclick="selectCategory('real')">
+        <span class="btn-icon">✓</span>
+        <span class="btn-body">
+          <span class="btn-title">Real — I can act on this</span>
+          <span class="btn-sub">Something specific and within reach</span>
+        </span>
+      </button>
+      <button class="classify-btn hypo" onclick="selectCategory('hypothetical')">
+        <span class="btn-icon">?</span>
+        <span class="btn-body">
+          <span class="btn-title">Hypothetical — what if</span>
+          <span class="btn-sub">Uncertain future, out of my control</span>
+        </span>
+      </button>
+    </div>
+    <button onclick="goRead()" class="btn btn-ghost" style="width:100%;justify-content:center;font-size:.8rem;margin-top:.625rem;">
+      ← Back
+    </button>
+  </div>
+
+  <!-- Step: Action (Real) -->
+  <div id="step-action" hidden>
+    <p style="font-size:.875rem;color:var(--text-soft);margin-bottom:.625rem;">💚 What's one small action you can take?</p>
+    <p style="font-size:.75rem;color:var(--text-dim);margin-bottom:.75rem;">It doesn't have to be big. Even the tiniest step counts.</p>
+    <textarea id="action-input" rows="3" placeholder="One small thing I can do…"></textarea>
+    <button onclick="resolveReal()" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.75rem;">
+      Done ✓
+    </button>
+  </div>
+
+  <!-- Step: Release (Hypothetical) -->
+  <div id="step-release" hidden>
+    <p style="font-size:.875rem;color:var(--text-soft);margin-bottom:.5rem;">This one is outside your control.</p>
+    <p style="font-size:.8rem;color:var(--text-dim);margin-bottom:1rem;line-height:1.5;">You've noticed it and named it. That's enough. Take a breath and let it go.</p>
+    <div id="release-bubble" style="padding:.875rem 1rem;border-radius:.75rem;background:rgba(168,155,199,0.08);border:1px solid rgba(168,155,199,0.15);margin-bottom:1rem;">
+      <p id="release-text" style="font-size:.875rem;color:rgba(168,155,199,0.8);line-height:1.5;font-style:italic;"></p>
+    </div>
+    <button onclick="triggerRelease()" class="btn btn-primary" style="width:100%;justify-content:center;background:rgba(168,155,199,0.2);border-color:rgba(168,155,199,0.3);">
+      Let it go ↑
+    </button>
+  </div>
+
+</div>
+
+<!-- Done state (hidden until all worries processed) -->
+<div id="state-done" hidden class="card fade-up" style="text-align:center;padding:2.5rem 1.5rem;">
+  <p style="font-size:2rem;margin-bottom:.75rem;">🌿</p>
+  <p style="font-size:1rem;font-weight:500;color:var(--text);margin-bottom:.4rem;">Session complete.</p>
+  <p id="done-summary" style="font-size:.875rem;color:var(--text-soft);line-height:1.5;"></p>
+  <a href="/worry" class="btn btn-primary" style="display:inline-flex;margin-top:1.25rem;">Back to Worry Time</a>
+</div>
+
+<!-- Timeout state (hidden until timer hits 0) -->
+<div id="state-timeout" hidden class="card fade-up" style="text-align:center;padding:2.5rem 1.5rem;">
+  <p style="font-size:2rem;margin-bottom:.75rem;">⏱</p>
+  <p style="font-size:1rem;font-weight:500;color:var(--text);margin-bottom:.4rem;">Time's up for today.</p>
+  <p id="timeout-summary" style="font-size:.875rem;color:var(--text-soft);line-height:1.5;"></p>
+  <p style="font-size:.8rem;color:var(--text-dim);margin-top:.5rem;">Any remaining worries are saved and will be here tomorrow.</p>
+  <a href="/worry" class="btn btn-primary" style="display:inline-flex;margin-top:1.25rem;">Back to Worry Time</a>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if worry_count > 0 %}
+<script>
+const WORRIES = {{ worries_json | safe }};
+
+const state = {
+  index: 0,
+  step: 'read',
+  secondsLeft: 20 * 60,
+  warnShown: false,
+  resolvedCount: 0,
+  skippedCount: 0,
+};
+
+// ── timer ──────────────────────────────────────────────────────────────────
+
+function formatTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${sec.toString().padStart(2, '0')}`;
+}
+
+function renderTimer() {
+  const el = document.getElementById('timer-display');
+  const pill = document.getElementById('timer-pill');
+  el.textContent = formatTime(state.secondsLeft);
+  if (state.secondsLeft <= 120) {
+    el.style.color = '#e8c068';
+    pill.style.background = 'rgba(232,192,104,0.12)';
+    pill.style.borderColor = 'rgba(232,192,104,0.3)';
+  }
+}
+
+const timerInterval = setInterval(() => {
+  state.secondsLeft--;
+  renderTimer();
+  if (state.secondsLeft === 120 && !state.warnShown) {
+    document.getElementById('warn-banner').hidden = false;
+    state.warnShown = true;
+  }
+  if (state.secondsLeft <= 0) {
+    clearInterval(timerInterval);
+    showTimeout();
+  }
+}, 1000);
+
+// ── render ─────────────────────────────────────────────────────────────────
+
+function renderSession() {
+  if (state.index >= WORRIES.length) { showDone(); return; }
+
+  const w = WORRIES[state.index];
+  document.getElementById('session-card').hidden = false;
+  document.getElementById('state-done').hidden = true;
+  document.getElementById('state-timeout').hidden = true;
+
+  document.getElementById('worry-text').textContent = w.content;
+  document.getElementById('worry-date').textContent = formatDate(w.date);
+  document.getElementById('release-text').textContent = w.content;
+  document.getElementById('progress-label').textContent =
+    `Worry ${state.index + 1} of ${WORRIES.length}`;
+
+  ['read','classify','action','release'].forEach(s =>
+    document.getElementById(`step-${s}`).hidden = (s !== state.step)
+  );
+}
+
+function formatDate(d) {
+  const dt = new Date(d + 'T00:00:00');
+  return dt.toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' });
+}
+
+// ── step transitions ────────────────────────────────────────────────────────
+
+function goRead()     { state.step = 'read';     renderSession(); }
+function goClassify() { state.step = 'classify'; renderSession(); }
+
+function selectCategory(cat) {
+  state.step = cat === 'real' ? 'action' : 'release';
+  renderSession();
+  if (cat === 'real') document.getElementById('action-input').focus();
+}
+
+async function skipCurrent() {
+  const w = WORRIES[state.index];
+  await fetch(`/api/worry/${w.id}/skip`, { method: 'POST' });
+  state.skippedCount++;
+  next();
+}
+
+async function resolveReal() {
+  const w = WORRIES[state.index];
+  const action = document.getElementById('action-input').value.trim();
+  await fetch(`/api/worry/${w.id}/classify`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category: 'real', action })
+  });
+  document.getElementById('action-input').value = '';
+  state.resolvedCount++;
+  next();
+}
+
+function triggerRelease() {
+  const bubble = document.getElementById('release-bubble');
+  bubble.classList.add('float-away');
+  bubble.addEventListener('animationend', async () => {
+    const w = WORRIES[state.index];
+    await fetch(`/api/worry/${w.id}/classify`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category: 'hypothetical' })
+    });
+    state.resolvedCount++;
+    bubble.classList.remove('float-away');
+    next();
+  }, { once: true });
+}
+
+function next() {
+  state.index++;
+  state.step = 'read';
+  renderSession();
+}
+
+// ── end states ──────────────────────────────────────────────────────────────
+
+function showDone() {
+  clearInterval(timerInterval);
+  document.getElementById('session-card').hidden = true;
+  document.getElementById('state-done').hidden = false;
+  const rem = WORRIES.length - state.resolvedCount - state.skippedCount;
+  document.getElementById('done-summary').textContent =
+    `You worked through ${state.resolvedCount} worry${state.resolvedCount !== 1 ? 'ies' : 'y'}.` +
+    (state.skippedCount > 0 ? ` ${state.skippedCount} skipped for next time.` : ' Well done.');
+}
+
+function showTimeout() {
+  document.getElementById('session-card').hidden = true;
+  document.getElementById('state-timeout').hidden = false;
+  const remaining = WORRIES.length - state.index;
+  document.getElementById('timeout-summary').textContent =
+    `${state.resolvedCount} resolved this session.` +
+    (remaining > 0 ? ` ${remaining} saved for next time.` : '');
+}
+
+// ── init ────────────────────────────────────────────────────────────────────
+
+renderSession();
+</script>
+{% endif %}
+{% endblock %}
