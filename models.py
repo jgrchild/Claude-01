@@ -12,8 +12,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
-    phone_number = Column(String(20), unique=True, nullable=False)
-    name = Column(String(100))
+    name = Column(String(100), default="Me")
     timezone = Column(String(50), default="America/New_York")
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -32,3 +31,11 @@ class GratitudeEntry(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="entries")
+
+
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+
+    id = Column(Integer, primary_key=True)
+    subscription_json = Column(Text, nullable=False, unique=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -1,18 +1,17 @@
+import json
 import logging
 import os
 from datetime import date, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from flask import Flask, request
+from flask import Flask, jsonify, render_template, request
+from pywebpush import WebPushException, webpush
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from twilio.request_validator import RequestValidator
-from twilio.twiml.messaging_response import MessagingResponse
 
 import config
-from models import Base, GratitudeEntry, User
+from models import Base, GratitudeEntry, PushSubscription, User
 from prompts import get_daily_prompt
-from sms import send_sms
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -26,6 +25,15 @@ Session = sessionmaker(bind=engine)
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
+def get_or_create_user(session) -> User:
+    user = session.query(User).filter_by(active=True).first()
+    if not user:
+        user = User(name="Me")
+        session.add(user)
+        session.commit()
+    return user
+
 
 def get_streak(session, user: User) -> int:
     check = date.today()
@@ -41,7 +49,7 @@ def get_streak(session, user: User) -> int:
 
 def streak_msg(n: int) -> str:
     if n == 0:
-        return "Start your streak tonight! 🌱"
+        return "Write your first entry to start a streak 🌱"
     if n == 1:
         return "1-day streak – great start! 🌱"
     if n < 7:
@@ -51,119 +59,124 @@ def streak_msg(n: int) -> str:
     return f"{n}-day streak! 🏆 Incredible!"
 
 
-# ── scheduled jobs ────────────────────────────────────────────────────────────
+# ── push notifications ────────────────────────────────────────────────────────
 
-def send_nightly_prompts():
-    session = Session()
+def send_push(subscription_info: dict, title: str, body: str):
+    if not config.VAPID_PRIVATE_KEY or not config.VAPID_PUBLIC_KEY:
+        log.warning("VAPID keys not configured – skipping push notification")
+        return
     try:
-        users = session.query(User).filter_by(active=True).all()
-        today = date.today()
-        prompt = get_daily_prompt(today.timetuple().tm_yday)
-        is_sunday = today.isoweekday() == 7
-
-        for user in users:
-            if is_sunday:
-                _send_sunday_message(session, user, prompt)
-            else:
-                send_sms(user.phone_number, f"🌙 Nightly gratitude\n\n{prompt}\n\nReply HELP for options.")
-    finally:
-        session.close()
+        webpush(
+            subscription_info=subscription_info,
+            data=json.dumps({"title": title, "body": body}),
+            vapid_private_key=config.VAPID_PRIVATE_KEY,
+            vapid_claims={"sub": config.VAPID_EMAIL},
+        )
+    except WebPushException as e:
+        log.error("Push notification failed: %s", e)
 
 
-def _send_sunday_message(session, user: User, prompt: str):
+def send_nightly_notification():
     today = date.today()
-    week_ago = today - timedelta(days=6)
-    entries = (
-        session.query(GratitudeEntry)
-        .filter(GratitudeEntry.user_id == user.id, GratitudeEntry.date >= week_ago)
-        .order_by(GratitudeEntry.date)
-        .all()
-    )
-    streak = get_streak(session, user)
-
-    lines = ["✨ Weekly Gratitude Digest\n"]
-    if entries:
-        for e in entries:
-            preview = e.content[:70] + ("…" if len(e.content) > 70 else "")
-            lines.append(f"• {e.date.strftime('%a %-d')}: {preview}")
-        lines.append(f"\n{streak_msg(streak)}")
-    else:
-        lines.append("No entries this week – there's still tonight!")
-
-    lines.append(f"\n🌙 This week:\n{prompt}\n\nReply HELP for options.")
-    send_sms(user.phone_number, "\n".join(lines))
-
-
-# ── SMS webhook ───────────────────────────────────────────────────────────────
-
-@app.route("/sms", methods=["POST"])
-def sms_webhook():
-    if config.VALIDATE_TWILIO:
-        validator = RequestValidator(config.TWILIO_AUTH_TOKEN)
-        sig = request.headers.get("X-Twilio-Signature", "")
-        if not validator.validate(request.url, request.form, sig):
-            log.warning("Invalid Twilio signature from %s", request.remote_addr)
-            return "Forbidden", 403
-
-    from_number = request.form.get("From", "").strip()
-    body = request.form.get("Body", "").strip()
-    resp = MessagingResponse()
+    prompt = get_daily_prompt(today.timetuple().tm_yday)
 
     session = Session()
     try:
-        user = session.query(User).filter_by(phone_number=from_number, active=True).first()
-        if not user:
-            resp.message("You're not registered. Ask the admin to add your number.")
-            return str(resp)
-
-        cmd = body.upper().strip()
-
-        if cmd == "HELP":
-            resp.message(
-                "Gratitude app commands:\n"
-                "• STREAK – your current streak\n"
-                "• HISTORY – your last 7 entries\n"
-                "• Or just reply with today's gratitude! 🙏"
-            )
-
-        elif cmd == "STREAK":
-            n = get_streak(session, user)
-            resp.message(streak_msg(n))
-
-        elif cmd == "HISTORY":
-            entries = (
-                session.query(GratitudeEntry)
-                .filter_by(user_id=user.id)
-                .order_by(GratitudeEntry.date.desc())
-                .limit(7)
-                .all()
-            )
-            if not entries:
-                resp.message("No entries yet. Reply to tonight's prompt to start! 🌱")
-            else:
-                lines = ["Your last 7 entries:\n"]
-                for e in entries:
-                    preview = e.content[:60] + ("…" if len(e.content) > 60 else "")
-                    lines.append(f"• {e.date.strftime('%b %-d')}: {preview}")
-                resp.message("\n".join(lines))
-
-        else:
-            today = date.today()
-            entry = session.query(GratitudeEntry).filter_by(user_id=user.id, date=today).first()
-            if entry:
-                entry.content = body
-            else:
-                entry = GratitudeEntry(user_id=user.id, date=today, content=body)
-                session.add(entry)
-            session.commit()
-
-            n = get_streak(session, user)
-            resp.message(f"✨ Saved! {streak_msg(n)}")
-
+        subs = session.query(PushSubscription).all()
+        for sub in subs:
+            send_push(json.loads(sub.subscription_json), "🌙 Gratitude time", prompt)
+        log.info("Sent nightly notification to %d subscribers", len(subs))
     finally:
         session.close()
 
-    return str(resp)
+
+# ── routes ────────────────────────────────────────────────────────────────────
+
+@app.route("/")
+def index():
+    today = date.today()
+    prompt = get_daily_prompt(today.timetuple().tm_yday)
+
+    session = Session()
+    try:
+        user = get_or_create_user(session)
+        entry = session.query(GratitudeEntry).filter_by(user_id=user.id, date=today).first()
+        streak = get_streak(session, user)
+        return render_template(
+            "index.html",
+            today=today,
+            prompt=prompt,
+            entry=entry,
+            streak=streak,
+            streak_msg=streak_msg(streak),
+            vapid_public_key=config.VAPID_PUBLIC_KEY,
+        )
+    finally:
+        session.close()
+
+
+@app.route("/entry", methods=["POST"])
+def save_entry():
+    content = (request.json or {}).get("content", "").strip()
+    if not content:
+        return jsonify({"error": "Entry cannot be empty"}), 400
+
+    today = date.today()
+    session = Session()
+    try:
+        user = get_or_create_user(session)
+        entry = session.query(GratitudeEntry).filter_by(user_id=user.id, date=today).first()
+        if entry:
+            entry.content = content
+        else:
+            entry = GratitudeEntry(user_id=user.id, date=today, content=content)
+            session.add(entry)
+        session.commit()
+        streak = get_streak(session, user)
+        return jsonify({"streak": streak, "streak_msg": streak_msg(streak)})
+    finally:
+        session.close()
+
+
+@app.route("/history")
+def history():
+    session = Session()
+    try:
+        user = get_or_create_user(session)
+        entries = (
+            session.query(GratitudeEntry)
+            .filter_by(user_id=user.id)
+            .order_by(GratitudeEntry.date.desc())
+            .limit(60)
+            .all()
+        )
+        streak = get_streak(session, user)
+        return render_template(
+            "history.html",
+            entries=entries,
+            streak=streak,
+            streak_msg=streak_msg(streak),
+        )
+    finally:
+        session.close()
+
+
+@app.route("/subscribe", methods=["POST"])
+def subscribe():
+    sub_data = request.json
+    if not sub_data:
+        return jsonify({"error": "No subscription data"}), 400
+
+    sub_json = json.dumps(sub_data, sort_keys=True)
+    session = Session()
+    try:
+        if not session.query(PushSubscription).filter_by(subscription_json=sub_json).first():
+            session.add(PushSubscription(subscription_json=sub_json))
+            session.commit()
+    finally:
+        session.close()
+
+    return jsonify({"ok": True})
 
 
 @app.route("/health")
@@ -171,12 +184,12 @@ def health():
     return {"status": "ok"}, 200
 
 
-# ── scheduler startup ─────────────────────────────────────────────────────────
+# ── scheduler ─────────────────────────────────────────────────────────────────
 
 def start_scheduler() -> BackgroundScheduler:
     scheduler = BackgroundScheduler(timezone=config.TIMEZONE)
     scheduler.add_job(
-        send_nightly_prompts,
+        send_nightly_notification,
         "cron",
         hour=config.NIGHTLY_HOUR,
         minute=config.NIGHTLY_MINUTE,
@@ -184,7 +197,7 @@ def start_scheduler() -> BackgroundScheduler:
     )
     scheduler.start()
     log.info(
-        "Scheduler started – nightly job at %02d:%02d %s",
+        "Scheduler started – nightly notification at %02d:%02d %s",
         config.NIGHTLY_HOUR,
         config.NIGHTLY_MINUTE,
         config.TIMEZONE,
@@ -192,10 +205,8 @@ def start_scheduler() -> BackgroundScheduler:
     return scheduler
 
 
-# Avoid double-start when Flask reloader spawns a child process
 if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
     _scheduler = start_scheduler()
 
-
 if __name__ == "__main__":
-    app.run(port=5000, use_reloader=False)
+    app.run(host="0.0.0.0", port=5000, use_reloader=False)

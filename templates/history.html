@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0a1f0f">
+  <title>History – Jen's Gratitude App (version 1)</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: linear-gradient(160deg, #071a0b, #0f2d17, #1a3a22);
+      min-height: 100vh;
+      min-height: 100dvh;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-in { animation: fadeIn 0.4s ease both; }
+  </style>
+</head>
+<body class="text-white font-sans antialiased">
+  <div class="max-w-lg mx-auto px-4 py-8 pb-16">
+
+    <!-- Header -->
+    <header class="flex justify-between items-center mb-8 fade-in">
+      <a href="/" class="text-sm text-green-400 hover:text-green-200 transition-colors">← Today</a>
+      <h1 class="text-xl font-semibold text-green-100 tracking-wide">History</h1>
+      <div class="w-16 text-right">
+        {% if streak > 0 %}
+          <span class="text-sm text-green-300">🔥 {{ streak }}</span>
+        {% endif %}
+      </div>
+    </header>
+
+    <!-- Streak summary -->
+    <div class="glass rounded-2xl p-5 mb-6 fade-in" style="animation-delay:0.05s">
+      <p class="text-green-200 text-sm">{{ streak_msg }}</p>
+      <p class="text-green-400 text-xs mt-1">{{ entries | length }} entries recorded</p>
+    </div>
+
+    <!-- Entries -->
+    {% if entries %}
+      <div class="space-y-3">
+        {% for entry in entries %}
+        <div class="glass rounded-xl p-5 fade-in" style="animation-delay:{{ loop.index0 * 0.03 }}s">
+          <p class="text-xs uppercase tracking-widest text-green-400 mb-2">
+            {{ entry.date.strftime('%A, %B %-d, %Y') }}
+          </p>
+          <p class="text-green-100 text-sm leading-relaxed whitespace-pre-wrap">{{ entry.content }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="glass rounded-2xl p-8 text-center fade-in" style="animation-delay:0.1s">
+        <p class="text-green-300 text-4xl mb-3">🌱</p>
+        <p class="text-green-200">No entries yet.</p>
+        <p class="text-green-400 text-sm mt-1">Head back and write your first one.</p>
+        <a href="/" class="inline-block mt-4 px-5 py-2 bg-green-700 hover:bg-green-600 rounded-xl text-white text-sm font-medium transition-colors">
+          Write today's entry
+        </a>
+      </div>
+    {% endif %}
+
+  </div>
+</body>
+</html>
