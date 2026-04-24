@@ -4,41 +4,42 @@
 {% block content %}
 <h1 class="page-title">Worry Time</h1>
 
+<!-- Quick capture -->
 <div class="card fade-up">
-  <p class="label">What's on your mind?</p>
-  <p style="font-size:.8rem;color:var(--text-dim);margin-bottom:.875rem;">This is your space. Get it out.</p>
-  <textarea id="worry-text" rows="4" placeholder="Write your worry here…"></textarea>
-
-  <div id="reframe-section" style="display:none;margin-top:1rem;">
-    <p style="font-size:.875rem;color:var(--text-soft);margin-bottom:.5rem;">💚 What part of this is in your control?</p>
-    <textarea id="reframe-text" rows="3" placeholder="Even a small thing counts…"></textarea>
-  </div>
-
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.875rem;">
+  <p class="label">Park a worry</p>
+  <p style="font-size:.8rem;color:var(--text-dim);margin-bottom:.875rem;">Log it and move on. You'll process it in your session.</p>
+  <textarea id="worry-text" rows="3" placeholder="What's on your mind?"></textarea>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.75rem;">
     <span id="worry-status" style="font-size:.8rem;color:var(--sage);"></span>
-    <div style="display:flex;gap:.5rem;">
-      <button id="reframe-btn" onclick="showReframe()" class="btn btn-ghost" style="display:none;font-size:.8rem;padding:.5rem 1rem;">Reframe</button>
-      <button onclick="saveWorry()" class="btn btn-primary" id="worry-save-btn">Add</button>
-    </div>
+    <button onclick="saveWorry()" class="btn btn-primary" id="worry-save-btn">Log it</button>
   </div>
 </div>
 
+<!-- Session entry point -->
+{% if open_count > 0 %}
+<a href="/worry/session" style="text-decoration:none;">
+  <div class="card fade-up" style="animation-delay:.06s;margin-top:.75rem;display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-color:rgba(125,184,138,0.2);">
+    <div>
+      <p style="font-size:.875rem;color:var(--text);font-weight:500;">Start Worry Time session</p>
+      <p style="font-size:.75rem;color:var(--text-soft);margin-top:.2rem;">{{ open_count }} worry{{ 'ies' if open_count != 1 else '' }} to work through · 20 min</p>
+    </div>
+    <span style="font-size:1.5rem;color:var(--sage);">→</span>
+  </div>
+</a>
+{% endif %}
+
+<!-- Open worries list -->
 {% if open_worries %}
 <div style="margin-top:1.25rem;">
-  <p class="label" style="margin-bottom:.5rem;">Open worries</p>
+  <p class="label" style="margin-bottom:.5rem;">Logged worries</p>
   <div style="display:flex;flex-direction:column;gap:.5rem;">
     {% for w in open_worries %}
-    <div class="card fade-up" id="worry-{{ w.id }}" style="animation-delay:{{ loop.index0 * 0.04 }}s">
-      <p style="font-size:.9rem;color:var(--text);line-height:1.5;">{{ w.content }}</p>
-      {% if w.reframe %}
-      <p style="font-size:.8rem;color:var(--text-soft);margin-top:.5rem;padding-top:.5rem;border-top:1px solid var(--border);">
-        💚 {{ w.reframe }}
-      </p>
-      {% endif %}
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.75rem;">
+    <div class="card fade-up" id="worry-{{ w.id }}" style="animation-delay:{{ loop.index0 * 0.04 }}s;">
+      <p style="font-size:.875rem;color:var(--text);line-height:1.5;">{{ w.content }}</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.625rem;">
         <span style="font-size:.7rem;color:var(--text-dim);">{{ w.date.strftime('%b %-d') }}</span>
-        <button onclick="resolveWorry({{ w.id }})" class="btn btn-ghost" style="font-size:.75rem;padding:.375rem .875rem;">
-          Mark resolved ✓
+        <button onclick="resolveWorry({{ w.id }})" class="btn btn-ghost" style="font-size:.75rem;padding:.3rem .75rem;">
+          ✓ Resolved
         </button>
       </div>
     </div>
@@ -47,62 +48,42 @@
 </div>
 {% endif %}
 
-{% if resolved_worries %}
-<div style="margin-top:1.25rem;">
-  <p class="label" style="margin-bottom:.5rem;">Resolved</p>
-  <div style="display:flex;flex-direction:column;gap:.5rem;">
-    {% for w in resolved_worries %}
-    <div class="card" style="opacity:.45;">
-      <p style="font-size:.85rem;color:var(--text);line-height:1.5;text-decoration:line-through;">{{ w.content }}</p>
-    </div>
-    {% endfor %}
-  </div>
+<!-- Patterns link -->
+<div style="margin-top:1.25rem;text-align:center;">
+  <a href="/worry/patterns" style="font-size:.8rem;color:var(--text-dim);text-decoration:none;border-bottom:1px solid var(--border);padding-bottom:.15rem;">
+    See this week's worry patterns →
+  </a>
 </div>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script>
-function showReframe() {
-  document.getElementById('reframe-section').style.display = 'block';
-  document.getElementById('reframe-btn').style.display = 'none';
-}
-
 async function saveWorry() {
   const content = document.getElementById('worry-text').value.trim();
   if (!content) return;
-  const reframe = document.getElementById('reframe-text').value.trim();
   const btn = document.getElementById('worry-save-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
     const res = await fetch('/api/worry', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ content, reframe })
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
     });
     if (res.ok) {
       document.getElementById('worry-text').value = '';
-      document.getElementById('reframe-text').value = '';
-      document.getElementById('reframe-section').style.display = 'none';
-      document.getElementById('reframe-btn').style.display = 'none';
-      document.getElementById('worry-status').textContent = 'Logged. You can let that sit here now.';
-      setTimeout(() => location.reload(), 1200);
+      document.getElementById('worry-status').textContent = 'Logged. You can let that go for now.';
+      setTimeout(() => location.reload(), 1000);
     }
   } catch { document.getElementById('worry-status').textContent = 'Network error.'; }
-  finally { btn.disabled = false; btn.textContent = 'Add'; }
+  finally { btn.disabled = false; btn.textContent = 'Log it'; }
 }
 
-document.getElementById('worry-text').addEventListener('input', () => {
-  const btn = document.getElementById('reframe-btn');
-  btn.style.display = document.getElementById('worry-text').value.trim() ? 'inline-flex' : 'none';
-});
-
 async function resolveWorry(id) {
-  const res = await fetch(`/api/worry/${id}/resolve`, { method:'POST' });
+  const res = await fetch(`/api/worry/${id}/resolve`, { method: 'POST' });
   if (res.ok) {
     const el = document.getElementById(`worry-${id}`);
     el.style.transition = 'opacity .3s, transform .3s';
-    el.style.opacity = '0'; el.style.transform = 'translateX(20px)';
-    setTimeout(() => el.remove(), 350);
+    el.style.opacity = '0'; el.style.transform = 'translateX(16px)';
+    setTimeout(() => el.remove(), 320);
   }
 }
 </script>

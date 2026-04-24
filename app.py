@@ -2,6 +2,8 @@ import json
 import logging
 import os
 import random
+import re
+from collections import Counter
 from datetime import date, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -39,6 +41,16 @@ WIN_RESPONSES = [
     "That deserves a moment of recognition.",
 ]
 
+WORRY_STOPWORDS = {
+    'a','an','the','i','my','is','it','its','that','this','of','and','to',
+    'in','for','me','be','am','are','was','will','just','so','but','not',
+    'about','with','at','if','on','or','do','have','what','get','got',
+    'feel','feeling','keep','would','could','should','really','very',
+    'when','know','think','need','want','going','been','more','some',
+    'dont','cant','wont','im','ive','ill','its','they','them','their',
+    'there','here','then','than','from','into','how','who','all','one',
+}
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -75,16 +87,25 @@ def streak_msg(n: int) -> str:
     return f"{n}-day streak! 🏆 Incredible!"
 
 
+def word_freq(entries, top_n=12):
+    words = []
+    for e in entries:
+        for w in re.findall(r"[a-z]+", e.content.lower()):
+            if len(w) > 3 and w not in WORRY_STOPWORDS:
+                words.append(w)
+    return Counter(words).most_common(top_n)
+
+
 # ── push notifications ────────────────────────────────────────────────────────
 
-def send_push(subscription_info: dict, title: str, body: str):
+def send_push(subscription_info: dict, title: str, body: str, url: str = "/"):
     if not config.VAPID_PRIVATE_KEY or not config.VAPID_PUBLIC_KEY:
         log.warning("VAPID keys not configured – skipping push notification")
         return
     try:
         webpush(
             subscription_info=subscription_info,
-            data=json.dumps({"title": title, "body": body}),
+            data=json.dumps({"title": title, "body": body, "url": url}),
             vapid_private_key=config.VAPID_PRIVATE_KEY,
             vapid_claims={"sub": config.VAPID_EMAIL},
         )
@@ -92,33 +113,33 @@ def send_push(subscription_info: dict, title: str, body: str):
         log.error("Push notification failed: %s", e)
 
 
-def _broadcast(title: str, body: str):
+def _broadcast(title: str, body: str, url: str = "/"):
     session = Session()
     try:
         subs = session.query(PushSubscription).all()
         for sub in subs:
-            send_push(json.loads(sub.subscription_json), title, body)
+            send_push(json.loads(sub.subscription_json), title, body, url)
         log.info("Broadcast '%s' to %d subscribers", title, len(subs))
     finally:
         session.close()
 
 
 def send_morning_notification():
-    _broadcast("🌤 Good morning", "How are you feeling today? Take a moment to check in.")
+    _broadcast("🌤 Good morning", "How are you feeling today? Take a moment to check in.", url="/mood")
 
 
 def send_midday_notification():
-    _broadcast("🌬 Midday breather", "Time for a quick breathing break. Just two minutes.")
+    _broadcast("🌬 Midday breather", "Time for a quick breathing break. Just two minutes.", url="/breathing")
 
 
 def send_worry_notification():
-    _broadcast("💭 Worry time", "Got something on your mind? This is your space to process it.")
+    _broadcast("💭 Worry time", "Your 20-minute session is ready.", url="/worry/session")
 
 
 def send_nightly_notification():
     today = date.today()
     prompt = get_daily_prompt(today.timetuple().tm_yday)
-    _broadcast("🌙 Evening gratitude", prompt)
+    _broadcast("🌙 Evening gratitude", prompt, url="/")
 
 
 # ── gratitude ─────────────────────────────────────────────────────────────────
@@ -256,18 +277,54 @@ def worry():
             .order_by(WorryEntry.created_at.desc())
             .all()
         )
-        resolved_worries = (
-            session.query(WorryEntry)
-            .filter_by(resolved=True)
-            .order_by(WorryEntry.created_at.desc())
-            .limit(10)
-            .all()
-        )
         return render_template(
             "worry.html",
             active="worry",
             open_worries=open_worries,
-            resolved_worries=resolved_worries,
+            open_count=len(open_worries),
+        )
+    finally:
+        session.close()
+
+
+@app.route("/worry/session")
+def worry_session():
+    session = Session()
+    try:
+        open_worries = (
+            session.query(WorryEntry)
+            .filter_by(resolved=False)
+            .order_by(WorryEntry.created_at.asc())
+            .all()
+        )
+        worries_json = json.dumps([
+            {"id": w.id, "content": w.content, "date": str(w.date)}
+            for w in open_worries
+        ])
+        return render_template(
+            "worry_session.html",
+            active="worry",
+            worry_count=len(open_worries),
+            worries_json=worries_json,
+        )
+    finally:
+        session.close()
+
+
+@app.route("/worry/patterns")
+def worry_patterns():
+    week_ago = date.today() - timedelta(days=6)
+    session = Session()
+    try:
+        entries = session.query(WorryEntry).filter(WorryEntry.date >= week_ago).all()
+        themes = word_freq(entries)
+        max_count = themes[0][1] if themes else 1
+        return render_template(
+            "worry_patterns.html",
+            active="worry",
+            themes=themes,
+            max_count=max_count,
+            entry_count=len(entries),
         )
     finally:
         session.close()
@@ -277,15 +334,49 @@ def worry():
 def save_worry():
     data = request.json or {}
     content = data.get("content", "").strip()
-    reframe = data.get("reframe", "").strip()
     if not content:
         return jsonify({"error": "Content required"}), 400
     session = Session()
     try:
-        entry = WorryEntry(date=date.today(), content=content, reframe=reframe or None)
+        entry = WorryEntry(date=date.today(), content=content)
         session.add(entry)
         session.commit()
         return jsonify({"ok": True, "id": entry.id})
+    finally:
+        session.close()
+
+
+@app.route("/api/worry/<int:worry_id>/classify", methods=["POST"])
+def classify_worry(worry_id):
+    data = request.json or {}
+    category = data.get("category")
+    action = data.get("action", "").strip()
+    if category not in ("real", "hypothetical"):
+        return jsonify({"error": "category must be real or hypothetical"}), 400
+    session = Session()
+    try:
+        entry = session.query(WorryEntry).filter_by(id=worry_id).first()
+        if not entry:
+            return jsonify({"error": "Not found"}), 404
+        entry.category = category
+        entry.action = action or None
+        entry.resolved = True
+        session.commit()
+        return jsonify({"ok": True})
+    finally:
+        session.close()
+
+
+@app.route("/api/worry/<int:worry_id>/skip", methods=["POST"])
+def skip_worry(worry_id):
+    session = Session()
+    try:
+        entry = session.query(WorryEntry).filter_by(id=worry_id).first()
+        if not entry:
+            return jsonify({"error": "Not found"}), 404
+        entry.skipped = True
+        session.commit()
+        return jsonify({"ok": True})
     finally:
         session.close()
 

@@ -50,6 +50,9 @@ class WorryEntry(Base):
     date = Column(Date, nullable=False)
     content = Column(Text, nullable=False)
     reframe = Column(Text)
+    category = Column(String(20))        # 'real' | 'hypothetical' | None
+    action = Column(Text)                # one small step (real worries)
+    skipped = Column(Boolean, default=False)
     resolved = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 

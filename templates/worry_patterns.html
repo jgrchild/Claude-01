@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Worry Patterns{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;">
+  <a href="/worry" style="color:var(--text-soft);font-size:.875rem;text-decoration:none;">← Back</a>
+  <h1 class="page-title" style="margin:0;">This week's themes</h1>
+</div>
+
+{% if themes %}
+<div class="card fade-up" style="margin-bottom:.75rem;">
+  <p style="font-size:.8rem;color:var(--text-soft);">Based on {{ entry_count }} worry{{ 'ies' if entry_count != 1 else '' }} in the last 7 days. Recurring words are worth noticing.</p>
+</div>
+
+<div class="card fade-up" style="animation-delay:.05s;">
+  <div style="display:flex;flex-direction:column;gap:.875rem;">
+    {% for word, count in themes %}
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.3rem;">
+        <span style="font-size:.9rem;color:var(--text);">{{ word }}</span>
+        <span style="font-size:.75rem;color:var(--text-dim);">{{ count }}×</span>
+      </div>
+      <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;">
+        <div style="height:100%;border-radius:2px;background:linear-gradient(90deg, #4a8f5e, var(--sage));width:{{ (count / max_count * 100) | round | int }}%;transition:width .5s ease;"></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card fade-up" style="animation-delay:.1s;margin-top:.75rem;">
+  <p class="label" style="margin-bottom:.4rem;">What to do with this</p>
+  <p style="font-size:.8rem;color:var(--text-soft);line-height:1.6;">
+    If a theme keeps appearing, it might be worth gentle attention — not judgment, just curiosity. What does it need?
+  </p>
+</div>
+
+{% else %}
+<div class="card fade-up" style="text-align:center;padding:2.5rem 1.25rem;">
+  <p style="font-size:2rem;margin-bottom:.75rem;">🌱</p>
+  <p style="color:var(--text-soft);">No worries logged this week.</p>
+  <p style="font-size:.8rem;color:var(--text-dim);margin-top:.25rem;">That's a good thing.</p>
+</div>
+{% endif %}
+{% endblock %}
